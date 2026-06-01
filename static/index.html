@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Psycho Portrait — генератор психологических характеристик</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🧠 Psycho Portrait</h1>
+    <p class="tagline">Загрузи PPTX с результатами тестов → получи психологическую характеристику</p>
+  </header>
+
+  <main>
+    <section class="card upload">
+      <h2>1. Загрузи презентацию</h2>
+      <div id="dropzone" class="dropzone">
+        <input type="file" id="file-input" accept=".pptx" hidden>
+        <div class="dz-content">
+          <div class="dz-icon">📄</div>
+          <p><strong>Перетащи .pptx сюда</strong></p>
+          <p>или <button type="button" id="browse-btn" class="link-btn">выбери файл</button></p>
+          <p class="hint">Макс. 25 МБ · 16PF · Big Five · MMPI · DISC · HOLLAND · MBTI · Амтхауэр</p>
+        </div>
+        <div class="dz-file hidden" id="dz-file">
+          <span id="file-name">—</span>
+          <button type="button" id="clear-btn" class="link-btn">×</button>
+        </div>
+      </div>
+
+      <div class="controls">
+        <label class="checkbox">
+          <input type="checkbox" id="brief-mode">
+          <span>Краткий режим (~800 слов)</span>
+        </label>
+        <button id="generate-btn" disabled class="primary">Сгенерировать характеристику</button>
+      </div>
+    </section>
+
+    <section class="card status hidden" id="status-card">
+      <h2>2. Процесс</h2>
+      <div id="status-log"></div>
+    </section>
+
+    <section class="card result hidden" id="result-card">
+      <h2>3. Результат</h2>
+      <div class="result-actions">
+        <button id="copy-btn" class="link-btn">📋 Скопировать</button>
+        <button id="download-btn" class="link-btn">💾 Скачать .md</button>
+        <button id="download-pdf-btn" class="link-btn">📄 Скачать .pdf</button>
+      </div>
+      <pre id="result-md" class="result-md"></pre>
+    </section>
+
+    <section class="card debug hidden" id="debug-card">
+      <h3>📊 Распознанные данные</h3>
+      <pre id="debug-profile" class="result-md"></pre>
+    </section>
+  </main>
+
+  <footer>
+    <p><small>⚠️ Это инструмент-ассистент, не замена психологу. Финальное заключение — за специалистом.</small></p>
+    <p><small>MIT · <a href="https://github.com/Saborrr/psycho-portrait" target="_blank">GitHub</a></small></p>
+  </footer>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
