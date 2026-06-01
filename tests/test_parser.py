@@ -49,6 +49,8 @@ L: 52  F: 48  K: 56
 Hs: 55  D: 62  Hy: 50  Pd: 48
 Mf: 50  Pa: 55  Pt: 60  Sc: 45
 Ma: 50  Si: 55
+Код: 2-4-7
+Тип профиля: пиковый
 
 DISC:
 D: 70  I: 50  S: 60  C: 75
@@ -65,7 +67,6 @@ IQ: 115
 
 
 def test_all_methods():
-    # Эмулируем вызов парсера
     profile = ParsedProfile(
         employee=parser.parse_employee_info(SAMPLE),
         methods=parser.MethodScores(),
@@ -76,12 +77,11 @@ def test_all_methods():
 
     # 16PF
     block = parser.detect_method_blocks(SAMPLE)["cattell_16pf"]
-    c, notes_c = parser.parse_cattell(block)
-    assert c.A == 7, f"16PF A != 7, got {c.A}"
+    c, _ = parser.parse_cattell(block)
+    assert c.A == 7
     assert c.E == 8
     assert c.O == 3
     print(f"✅ 16PF: {sum(1 for f in c.model_fields if getattr(c, f) is not None)}/16 факторов")
-    assert any(f == 7 for f in [c.A, c.B, c.C, c.E])
 
     # Big Five
     block = parser.detect_method_blocks(SAMPLE)["big_five"]
@@ -91,12 +91,40 @@ def test_all_methods():
     assert bf.neuroticism == 35
     print(f"✅ Big Five: O={bf.openness}, C={bf.conscientiousness}, E={bf.extraversion}, A={bf.agreeableness}, N={bf.neuroticism}")
 
-    # MMPI
+    # MMPI / СМИЛ — НОВОЕ: валидность, код профиля, тип
     block = parser.detect_method_blocks(SAMPLE)["mmpi"]
     mm, _ = parser.parse_mmpi(block)
+    assert mm.L == 52, f"L != 52, got {mm.L}"
+    assert mm.F == 48, f"F != 48, got {mm.F}"
+    assert mm.K == 56, f"K != 56, got {mm.K}"
     assert mm.D == 62
     assert mm.Pt == 60
-    print(f"✅ MMPI: D={mm.D}, Pt={mm.Pt}, Hs={mm.Hs}, Si={mm.Si}")
+    assert mm.code == "2-4-7", f"code != 2-4-7, got {mm.code}"
+    assert mm.profile_type == "пиковый"
+    assert mm.validity == "valid", f"validity != valid, got {mm.validity}"
+    print(f"✅ СМИЛ: L={mm.L}, F={mm.F}, K={mm.K}, D={mm.D}, Pt={mm.Pt}, код={mm.code}, тип={mm.profile_type}, валидность={mm.validity}")
+
+    # MMPI — кейс с сомнительной валидностью
+    SUSPICIOUS = """
+MMPI:
+L: 35  F: 85  K: 38
+Hs: 50  D: 55  Hy: 52  Pd: 60
+Mf: 50  Pa: 55  Pt: 60  Sc: 45
+Ma: 50  Si: 55
+"""
+    mm2, _ = parser.parse_mmpi(SUSPICIOUS)
+    assert mm2.validity == "questionable", f"validity != questionable, got {mm2.validity}"
+    print(f"✅ СМИЛ валидность (сомнительный): L={mm2.L}, F={mm2.F}, K={mm2.K} → {mm2.validity}")
+
+    # MMPI — кейс с невалидным
+    INVALID = """
+MMPI:
+L: 50  F: 110  K: 50
+Hs: 50  D: 55
+"""
+    mm3, _ = parser.parse_mmpi(INVALID)
+    assert mm3.validity == "invalid", f"validity != invalid, got {mm3.validity}"
+    print(f"✅ СМИЛ валидность (невалидный): F={mm3.F} → {mm3.validity}")
 
     # DISC
     block = parser.detect_method_blocks(SAMPLE)["disc"]

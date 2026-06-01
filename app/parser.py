@@ -203,29 +203,35 @@ def parse_big_five(block: str) -> tuple[BigFive, list[str]]:
 
 
 def parse_mmpi(block: str) -> tuple[MMPI, list[str]]:
+    """Парсер СМИЛ / MMPI / ММИЛ.
+    Распознаёт:
+      - Валидность L/F/K
+      - Базисные шкалы Hs/D/Hy/Pd/Mf/Pa/Pt/Sc/Ma/Si
+      - Код профиля (напр. '2-4-7', 'Профиль: 4-9', 'Код: 2-4-7')
+      - Тип профиля ('линейный', 'пиковый', 'смешанный')
+    """
     data = MMPI()
     notes = []
-    # Клинические шкалы
+    # Синонимы для каждой шкалы — название + лексема
     scale_synonyms = {
-        "L":  [r"^L\b", r"\bложь\b", r"\bлжи\b", r"\bLie\b"],
-        "F":  [r"\bдостоверность\b", r"^F\b", r"\bF-шкала\b"],
-        "K":  [r"\bкоррекция\b", r"^K\b", r"Correction"],
-        "Hs": [r"\bипохондрия\b", r"\bHs\b", r"^1\b", r"шкала\s*1"],
-        "D":  [r"\bдепрессия\b", r"\bD\b", r"шкала\s*2"],
-        "Hy": [r"\bистерия\b", r"\bконверсия\b", r"\bHy\b", r"шкала\s*3"],
-        "Pd": [r"\bасоциальн", r"\bпсихопатия\b", r"\bPd\b", r"шкала\s*4"],
-        "Mf": [r"\bмаскулинност", r"\bфемининност", r"\bMf\b", r"шкала\s*5"],
-        "Pa": [r"\bпаранойя\b", r"\bPa\b", r"шкала\s*6"],
-        "Pt": [r"\bпсихастения\b", r"\bтревожность\b", r"\bPt\b", r"шкала\s*7"],
-        "Sc": [r"\bшизофрения\b", r"\bSc\b", r"шкала\s*8"],
-        "Ma": [r"\bгипомания\b", r"\bMa\b", r"шкала\s*9"],
-        "Si": [r"\bсоциальн\w+\s+интроверс", r"\bSi\b", r"шкала\s*0"],
+        "L":  [r"\bложь\b", r"\bлжи\b", r"\bLie\b", r"\bL-?шкала\b"],
+        "F":  [r"\bдостоверность\b", r"\bF-?шкала\b", r"\bаггравация\b", r"\bFrequency\b"],
+        "K":  [r"\bкоррекция\b", r"\bK-?шкала\b", r"\bCorrection\b", r"\bзащитн\w+\s+установк"],
+        "Hs": [r"\bипохондрия\b", r"\bHs\b", r"\bсверхконтрол"],
+        "D":  [r"\bпессимистичност", r"\bдепрессия\b", r"\bD\b", r"\bшкала\s*2\b"],
+        "Hy": [r"\bэмоциональн\w+\s+лабильност", r"\bистерия\b", r"\bконверсия\b", r"\bHy\b"],
+        "Pd": [r"\bимпульсивност", r"\bасоциальн\w+\s+психопатия", r"\bPd\b"],
+        "Mf": [r"\bмаскулинност", r"\bфемининност", r"\bMf\b"],
+        "Pa": [r"\bригидност", r"\bпаранойя\b", r"\bPa\b"],
+        "Pt": [r"\bтревожност", r"\bпсихастения\b", r"\bPt\b"],
+        "Sc": [r"\bиндивидуалистичност", r"\bшизофрения\b", r"\bSc\b"],
+        "Ma": [r"\bоптимизм\w+\s+активност", r"\bгипомания\b", r"\bMa\b"],
+        "Si": [r"\bсоциальн\w+\s+интроверс", r"\bSi\b"],
     }
     found = 0
     for k, syns in scale_synonyms.items():
         for syn in syns:
-            # Только паттерн вида 'Шкала: 65', 'L = 65', не 'шкала 1' (чтоб не ловило 'D' в слове)
-            pat = rf"(?:{syn})[ \t]*[:=—\-][ \t]*(\d{{1,3}})"
+            pat = rf"(?:{syn})[ \t]*[:=—\-][ \t]*(\d{{1,3}}(?:[.,]\d+)?)"
             m = re.search(pat, block, re.IGNORECASE)
             if m:
                 val = _num(m.group(1))
@@ -233,8 +239,53 @@ def parse_mmpi(block: str) -> tuple[MMPI, list[str]]:
                     setattr(data, k, val)
                     found += 1
                     break
+
+    # Если для базисных шкал не сработали длинные синонимы — пробуем одиночные коды
+    # Но осторожно: D/Pt/Sc — пересекаются с другими. Ищем только в формате 'D: 65' и т.п.
+    code_only = {
+        "L":  r"\bL\b",  "F":  r"\bF\b",  "K":  r"\bK\b",
+        "Hs": r"\bHs\b", "D":  r"\bD\b",  "Hy": r"\bHy\b",
+        "Pd": r"\bPd\b", "Mf": r"\bMf\b", "Pa": r"\bPa\b",
+        "Pt": r"\bPt\b", "Sc": r"\bSc\b", "Ma": r"\bMa\b", "Si": r"\bSi\b",
+    }
+    for k, code_pat in code_only.items():
+        if getattr(data, k) is None:
+            pat = rf"(?:{code_pat})[ \t]*[:=—\-][ \t]*(\d{{1,3}}(?:[.,]\d+)?)"
+            m = re.search(pat, block)
+            if m:
+                val = _num(m.group(1))
+                if val is not None and 0 <= val <= 120:
+                    setattr(data, k, val)
+                    found += 1
+
+    # Код профиля
+    code_m = re.search(r"\b(?:код|профиль)[\s:]+([1-9](?:-[1-9]){0,2})\b", block, re.IGNORECASE)
+    if code_m:
+        data.code = code_m.group(1)
+
+    # Тип профиля
+    type_m = re.search(r"\bтип[\s:]+профиля[\s:]+(линейный|пиковый|смешанный|двухпиковый|трёхпиковый|конверсионный|невротический|психотический|амбивалентный)\b", block, re.IGNORECASE)
+    if type_m:
+        data.profile_type = type_m.group(1).lower()
+
+    # Валидность (автоматическая оценка)
+    if data.F is not None and data.F >= 100:
+        data.validity = "invalid"
+    elif data.F is not None and data.F >= 80:
+        data.validity = "questionable"
+    elif data.L is not None and data.K is not None:
+        # Классическая подсказка: L+K низкие + F высокий = профиль сомнителен
+        if data.L <= 40 and data.K <= 40 and data.F is not None and data.F >= 65:
+            data.validity = "questionable"
+        else:
+            data.validity = "valid"
+    elif data.F is not None and data.F <= 65:
+        data.validity = "valid"
+
     if found == 0:
-        notes.append("MMPI: ничего не распознано. Проверь формат (T-баллы).")
+        notes.append("MMPI/СМИЛ: ничего не распознано. Проверь формат (T-баллы).")
+    elif found < 8:
+        notes.append(f"MMPI/СМИЛ: распознано {found}/13 шкал. Возможно, формат нестандартный.")
     return data, notes
 
 

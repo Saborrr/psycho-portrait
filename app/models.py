@@ -50,22 +50,31 @@ class BigFive(BaseModel):
 
 
 class MMPI(BaseModel):
-    """MMPI / СМИЛ — 3 валид. + 10 клинических шкал, T-баллы (норма 50, SD 10)."""
+    """MMPI / СМИЛ (Собчик) / ММИЛ (Березин).
+    3 валид. + 10 базисных шкал, T-баллы (норма 50, SD 10).
+    Названия шкал — модификация Собчик (поведенческие, не клинические).
+    """
     # Валидность
-    L: Optional[float] = Field(None, description="Ложь")
-    F: Optional[float] = Field(None, description="Достоверность (F)")
-    K: Optional[float] = Field(None, description="Коррекция (K)")
-    # Клинические
-    Hs: Optional[float] = Field(None, description="1. Ипохондрия")
-    D: Optional[float] = Field(None, description="2. Депрессия")
-    Hy: Optional[float] = Field(None, description="3. Истерия / конверсия")
-    Pd: Optional[float] = Field(None, description="4. Асоциальная психопатия")
+    L: Optional[float] = Field(None, description="Ложь (стремление к социальной желательности)")
+    F: Optional[float] = Field(None, description="Достоверность (F) — необычные ответы, аггравация")
+    K: Optional[float] = Field(None, description="Коррекция (K) — защитная установка, контроль")
+    # Базисные шкалы (1-0)
+    Hs: Optional[float] = Field(None, description="1. Невротический сверхконтроль (ипохондрия)")
+    D: Optional[float] = Field(None, description="2. Пессимистичность (депрессия)")
+    Hy: Optional[float] = Field(None, description="3. Эмоциональная лабильность (истерия)")
+    Pd: Optional[float] = Field(None, description="4. Импульсивность (асоциальная психопатия)")
     Mf: Optional[float] = Field(None, description="5. Маскулинность-фемининность")
-    Pa: Optional[float] = Field(None, description="6. Паранойя")
-    Pt: Optional[float] = Field(None, description="7. Психастения")
-    Sc: Optional[float] = Field(None, description="8. Шизофрения")
-    Ma: Optional[float] = Field(None, description="9. Гипомания")
+    Pa: Optional[float] = Field(None, description="6. Ригидность (паранойя)")
+    Pt: Optional[float] = Field(None, description="7. Тревожность (психастения)")
+    Sc: Optional[float] = Field(None, description="8. Индивидуалистичность (шизофрения)")
+    Ma: Optional[float] = Field(None, description="9. Оптимизм и активность (гипомания)")
     Si: Optional[float] = Field(None, description="0. Социальная интроверсия")
+    # Код профиля (по Собчик: 2-3 пиковые шкалы, напр. "2-4-7" или "4-9")
+    code: Optional[str] = Field(None, description="Код профиля (напр. '2-4-7' или '4-9')")
+    # Тип профиля (по Собчик: линейный, пиковый, и т.п.)
+    profile_type: Optional[str] = Field(None, description="Тип профиля: линейный / пиковый / смешанный")
+    # Достоверность
+    validity: Optional[str] = Field(None, description="Валидность: valid / questionable / invalid")
 
 
 class DISC(BaseModel):
