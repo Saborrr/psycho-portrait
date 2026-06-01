@@ -75,6 +75,9 @@ class MMPI(BaseModel):
     profile_type: Optional[str] = Field(None, description="Тип профиля: линейный / пиковый / смешанный")
     # Достоверность
     validity: Optional[str] = Field(None, description="Валидность: valid / questionable / invalid")
+    # Корпоративные / оценочные шкалы (ЭФКО и др. — не из стандартного ММИЛ)
+    gentleman: Optional[float] = Field(None, description="Корпоративная шкала «Джентльмен» (ЭФКО): социально-корректное поведение, следование конвенциональным нормам")
+    sanity: Optional[float] = Field(None, description="Корпоративная шкала «Здравомыслие» (ЭФКО): реалистичность, трезвость, практичность суждений")
 
 
 class DISC(BaseModel):

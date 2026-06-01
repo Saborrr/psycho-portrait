@@ -104,6 +104,21 @@ def test_all_methods():
     assert mm.validity == "valid", f"validity != valid, got {mm.validity}"
     print(f"✅ СМИЛ: L={mm.L}, F={mm.F}, K={mm.K}, D={mm.D}, Pt={mm.Pt}, код={mm.code}, тип={mm.profile_type}, валидность={mm.validity}")
 
+    # Корпоративные шкалы ЭФКО (джентльмен, здравомыслие)
+    EFKO_SAMPLE = """
+MMPI:
+L: 52  F: 48  K: 56
+Hs: 55  D: 62  Hy: 50  Pd: 48
+Mf: 50  Pa: 55  Pt: 60  Sc: 45
+Ma: 50  Si: 55
+Джентльмен: 65
+Здравомыслие: 58
+"""
+    mm_efko, _ = parser.parse_mmpi(EFKO_SAMPLE)
+    assert mm_efko.gentleman == 65, f"gentleman != 65, got {mm_efko.gentleman}"
+    assert mm_efko.sanity == 58, f"sanity != 58, got {mm_efko.sanity}"
+    print(f"✅ Корпоративные шкалы ЭФКО: Джентльмен={mm_efko.gentleman}, Здравомыслие={mm_efko.sanity}")
+
     # MMPI — кейс с сомнительной валидностью
     SUSPICIOUS = """
 MMPI:

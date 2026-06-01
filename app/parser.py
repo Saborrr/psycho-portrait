@@ -268,6 +268,20 @@ def parse_mmpi(block: str) -> tuple[MMPI, list[str]]:
     if type_m:
         data.profile_type = type_m.group(1).lower()
 
+    # Корпоративные оценочные шкалы (ЭФКО и т.п.)
+    # Джентльмен — социально-корректное поведение, этикет, следование конвенциональным нормам
+    gentleman_m = re.search(r"\b(?:джентльмен|gentleman)\b[ \t]*[:=—\-][ \t]*(\d{1,3}(?:[.,]\d+)?)", block, re.IGNORECASE)
+    if gentleman_m:
+        val = _num(gentleman_m.group(1))
+        if val is not None and 0 <= val <= 120:
+            data.gentleman = val
+    # Здравомыслие — реалистичность, трезвость, практичность суждений
+    sanity_m = re.search(r"\b(?:здравомыслие|здравый\s+смысл|common[\s\-]?sense|sanity)\b[ \t]*[:=—\-][ \t]*(\d{1,3}(?:[.,]\d+)?)", block, re.IGNORECASE)
+    if sanity_m:
+        val = _num(sanity_m.group(1))
+        if val is not None and 0 <= val <= 120:
+            data.sanity = val
+
     # Валидность (автоматическая оценка)
     if data.F is not None and data.F >= 100:
         data.validity = "invalid"
