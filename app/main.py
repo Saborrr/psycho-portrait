@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .parser import parse_pptx
 from .models import ParsedProfile
-from .llm import chat
+from .llm import chat, list_providers, get_active_provider, get_model, reset_client
 from .prompts import SYSTEM_PROMPT, build_user_prompt
 from .parser_pdf import parse_pdf
 from . import storage
@@ -58,7 +58,37 @@ async def index() -> str:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "service": "psycho-portrait", "version": app.version}
+    return {
+        "status": "ok",
+        "service": "psycho-portrait",
+        "version": app.version,
+        "llm": {
+            "provider": get_active_provider(),
+            "model": get_model(),
+        },
+    }
+
+
+@app.get("/api/llm/providers")
+async def api_llm_providers() -> dict:
+    """Список всех поддерживаемых LLM-провайдеров с дефолтными моделями."""
+    return {
+        "active": {
+            "provider": get_active_provider(),
+            "model": get_model(),
+        },
+        "providers": list_providers(),
+    }
+
+
+@app.get("/api/llm/status")
+async def api_llm_status() -> dict:
+    """Какой провайдер и модель активны прямо сейчас."""
+    return {
+        "provider": get_active_provider(),
+        "model": get_model(),
+        "api_key_set": bool(os.getenv("LLM_API_KEY")),
+    }
 
 
 @app.post("/api/parse")
@@ -366,6 +396,24 @@ async def api_employee_sessions(name: str) -> dict:
     if not sessions:
         raise HTTPException(404, f"Сотрудник {name!r} не найден в истории")
     return {"employee": name, "sessions": sessions}
+
+
+@app.get("/api/sessions/{session_id}/norms")
+async def api_session_norms(session_id: int) -> dict:
+    """Сравнение с нормой (Z/T-скоры, перцентили, категории) для загрузки из истории."""
+    data = storage.get_session(session_id)
+    if not data:
+        raise HTTPException(404, f"Сессия #{session_id} не найдена")
+    from .models import ParsedProfile
+    from .norms import compute_deviations, format_deviations_md
+    profile = ParsedProfile.model_validate(data["profile"])
+    dev = compute_deviations(profile)
+    return {
+        "session_id": session_id,
+        "employee": data["employee_name"],
+        "deviations": dev,
+        "markdown": format_deviations_md(dev),
+    }
 
 
 @app.get("/api/db/stats")
