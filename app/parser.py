@@ -405,8 +405,10 @@ def parse_amthauer(block: str) -> tuple[Amthauer, list[str]]:
 
 # === Главная функция парсинга ===
 
-def parse_pptx(path: str) -> ParsedProfile:
-    full, slides, n = extract_all_text(path)
+def parse_text(full: str, slides_count: int = 0) -> ParsedProfile:
+    """Общая логика «текст → ParsedProfile».
+    Используется и из PPTX-, и из PDF-парсера (для сканов после OCR).
+    """
     employee = parse_employee_info(full)
     blocks = detect_method_blocks(full)
 
@@ -456,6 +458,11 @@ def parse_pptx(path: str) -> ParsedProfile:
         employee=employee,
         methods=methods,
         raw_text=full,
-        slides_count=n,
+        slides_count=slides_count,
         notes=notes,
     )
+
+
+def parse_pptx(path: str) -> ParsedProfile:
+    full, _slides, n = extract_all_text(path)
+    return parse_text(full, slides_count=n)
