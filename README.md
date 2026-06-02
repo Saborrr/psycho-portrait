@@ -20,13 +20,15 @@
 **Psycho Portrait** — инструмент для психолога-практика, который превращает сухие баллы по тестам в профессиональную психологическую характеристику сотрудника.
 
 ```
-PPTX с результатами тестов
+PPTX или PDF с результатами тестов
          ↓
-   парсер (python-pptx + regex)
+   парсер (python-pptx / pdfplumber + tesseract OCR)
          ↓
   структурированный профиль
          ↓
-   LLM (DeepSeek / GLM / OpenAI)
+   сравнение с нормой (Z/T-скоры, перцентили, категории)
+         ↓
+   LLM (DeepSeek / GLM / Qwen / ChatGPT / Gemini / MiniMax)
          ↓
   готовая характеристика в Markdown
 ```
@@ -41,8 +43,10 @@ PPTX с результатами тестов
 |----------|---------|
 | Час вручную писать характеристику по таблице баллов | 20 секунд — готово |
 | Забыл нюанс интерпретации шкалы Собчик | LLM с промптом по Собчик/Березину |
-| Каждый раз вспоминать нормы для каждой методики | Нормы зашиты в промпт |
-| Потерял результат прошлого обследования | Структурированный JSON |
+| Каждый раз вспоминать нормы для каждой методики | Z/T-скоры + перцентили по 7 методикам |
+| Бланки приходят как PDF, а не PPTX | Парсер PDF (text-layer + OCR fallback для сканов) |
+| Потерял результат прошлого обследования | SQLite-история с дедупом по sha256 |
+| Сотрудник проходил тест раньше — нужна динамика | `/api/employees/{name}/sessions` |
 | Формат презентации каждый раз разный | Гибкие regex-паттерны + подсказки парсера |
 
 ---
@@ -113,34 +117,47 @@ docker run -p 8000:8000 --env-file .env psycho-portrait
 
 ## ⚙️ Конфигурация (.env)
 
+С v0.3 добавлен реестр LLM-провайдеров. Просто выбери через `LLM_PROVIDER=...` и положи ключ.
+
 ```env
-# LLM провайдер (любой OpenAI-compat)
+# ===== LLM =====
+# Провайдер: glm | deepseek | qwen | openai | gemini | minimax | custom
+LLM_PROVIDER=deepseek
+LLM_API_KEY=sk-ваш_ключ_сюда
 
-# DeepSeek (рекомендую — быстро и дёшево)
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_API_KEY=***
-LLM_MODEL=deepseek-chat
-
-# z.ai GLM 5.1
-# LLM_BASE_URL=https://api.z.ai/api/coding/paas/v4
-# LLM_API_KEY=***
-# LLM_MODEL=glm-5
-
-# OpenAI
-# LLM_BASE_URL=https://api.openai.com/v1
-# LLM_API_KEY=sk-...
+# Модель (если не указана — берётся дефолт провайдера)
+# LLM_MODEL=qwen-plus
 # LLM_MODEL=gpt-4o-mini
+# LLM_MODEL=MiniMax-M3
 
-# Gemini OpenAI-compat
-# LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
-# LLM_API_KEY=***
-# LLM_MODEL=gemini-2.0-flash
-
+# Температура (дефолт 0.4)
 LLM_TEMPERATURE=0.4
 
-# Сервер
+# Свой эндпоинт (только если LLM_PROVIDER=custom)
+# LLM_BASE_URL=https://my-proxy.example.com/v1
+
+# ===== Сервер =====
 HOST=0.0.0.0
 PORT=8000
+
+# ===== Лимиты =====
+MAX_UPLOAD_MB=25
+MAX_SLIDES=50
+```
+
+### Доступные провайдеры
+
+| ID | Сервис | Дефолт-модель | Где ключ |
+|----|--------|---------------|----------|
+| `glm` | z.ai GLM | `glm-5.1` | z.ai |
+| `deepseek` | DeepSeek | `deepseek-chat` | platform.deepseek.com |
+| `qwen` | Alibaba Qwen (DashScope) | `qwen-plus` | Alibaba Cloud → DashScope |
+| `openai` | OpenAI / ChatGPT | `gpt-4o-mini` | platform.openai.com |
+| `gemini` | Google Gemini OpenAI-compat | `gemini-2.0-flash` | aistudio.google.com |
+| `minimax` | MiniMax M3 | `MiniMax-M3` | minimax.io (vision, 1M контекст) |
+| `custom` | свой | — | — |
+
+Проверить активного провайдера: `GET /api/llm/status` или `GET /api/llm/providers` (полный список с дефолтами).
 
 # Лимиты
 MAX_UPLOAD_MB=25
@@ -153,10 +170,23 @@ MAX_UPLOAD_MB=25
 | Метод | Путь | Что делает |
 |-------|------|-----------|
 | `GET` | `/` | Web UI (drag&drop) |
-| `GET` | `/health` | Health check |
-| `POST` | `/api/parse` | Только парсинг PPTX → JSON (для отладки шаблона) |
-| `POST` | `/api/generate` | Полный цикл: парсинг + LLM → характеристика |
-| `POST` | `/api/raw-text` | Только текст из PPTX (для отладки парсера) |
+| `GET` | `/health` | Health check (включая активного LLM) |
+| `GET` | `/docs` | Swagger UI |
+| `POST` | `/api/parse` | Парсинг PPTX → JSON |
+| `POST` | `/api/generate` | Полный цикл: PPTX → парсинг + LLM → характеристика |
+| `POST` | `/api/raw-text` | Только текст из PPTX |
+| `POST` | `/api/parse-pdf` | Парсинг PDF → JSON (text-layer + OCR fallback) |
+| `POST` | `/api/generate-pdf` | Полный цикл: PDF → парсинг + LLM → характеристика |
+| `POST` | `/api/raw-text-pdf` | Только текст из PDF (с указанием источника: OCR или text-layer) |
+| `GET` | `/api/sessions` | Список всех загрузок (SQLite) |
+| `GET` | `/api/sessions/{id}` | Полный профиль одной загрузки |
+| `DELETE` | `/api/sessions/{id}` | Удалить загрузку |
+| `GET` | `/api/sessions/{id}/norms` | Z/T-скоры сравнения с нормой |
+| `GET` | `/api/employees` | Список уникальных сотрудников |
+| `GET` | `/api/employees/{name}/sessions` | Все загрузки по сотруднику |
+| `GET` | `/api/db/stats` | Статистика по БД |
+| `GET` | `/api/llm/providers` | Список поддерживаемых LLM-провайдеров |
+| `GET` | `/api/llm/status` | Активный провайдер и модель |
 
 ### Пример: `/api/generate` через curl
 
@@ -268,11 +298,12 @@ psycho-portrait/
 
 ## 🗺️ Roadmap
 
-- [ ] **Telegram-бот** (через `@my_amster_bot`) — кидаешь файл → получаешь характеристику в чат
-- [ ] **PDF на вход** (pdfplumber) — для бланков с отсканированными результатами
-- [ ] **История загрузок** (SQLite) — сохранять все профили, сравнивать между сотрудниками
+- [x] **PDF на вход** (pdfplumber + tesseract OCR) — для бланков с отсканированными результатами ✅ v0.2
+- [x] **История загрузок** (SQLite) — сохранять все профили, дедуп по sha256 ✅ v0.2
+- [x] **Сравнение с нормой** — учёт пола, возраста, проф-группы, Z/T-скоры ✅ v0.3
+- [x] **Реестр LLM-провайдеров** — DeepSeek / GLM / Qwen / ChatGPT / Gemini / MiniMax ✅ v0.3
 - [ ] **Генератор шаблона PPTX** — сделать готовый бланк, который скачал и заполнил
-- [ ] **Сравнение с нормой** — учёт пола, возраста, проф. группы
+- [ ] **Telegram-бот** (через `@my_amster_bot`) — кидаешь файл → получаешь характеристику в чат
 - [ ] **Расширение методик:**
   - [ ] Тест Роршаха (проективный)
   - [ ] ТАТ (тематический апперцептивный)
