@@ -247,6 +247,52 @@ def build_user_prompt(profile: ParsedProfile) -> str:
         if methods.amthauer.iq:
             parts.append(f"- **IQ**: {methods.amthauer.iq}")
 
+    # === ЭФКО-методики (15 тестов + ЭЧВ/ЭЧМ + блоки из реальных pptx) ===
+    if methods.efko:
+        efko = methods.efko
+        parts.append("\n### Корпоративные методики ГК «ЭФКО»\n")
+        parts.append("⚠️ Это **внутренние методики** ЭФКО (не стандартные психотесты). Интерпретация — по методичке ЭФКО. При отсутствии методички давай осторожные обобщения.\n")
+        # ИНТЕЛЛЕКТ
+        if efko.intellekt and any(v is not None for v in [efko.intellekt.logicheskiy, efko.intellekt.obrazny, efko.intellekt.leksika]):
+            parts.append("\n**ИНТЕЛЛЕКТ (3 шкалы, %):**")
+            if efko.intellekt.logicheskiy is not None: parts.append(f"- Логический: {efko.intellekt.logicheskiy}")
+            if efko.intellekt.obrazny is not None: parts.append(f"- Образный: {efko.intellekt.obrazny}")
+            if efko.intellekt.leksika is not None: parts.append(f"- Лексика: {efko.intellekt.leksika}")
+        # АКТИВНОСТЬ
+        if efko.aktivnost and any(v is not None for v in [efko.aktivnost.fizicheskaya, efko.aktivnost.intellektualnaya, efko.aktivnost.kommunikacionnaya]):
+            parts.append("\n**АКТИВНОСТЬ (3 шкалы, %):**")
+            if efko.aktivnost.fizicheskaya is not None: parts.append(f"- Физическая: {efko.aktivnost.fizicheskaya}")
+            if efko.aktivnost.intellektualnaya is not None: parts.append(f"- Интеллектуальная: {efko.aktivnost.intellektualnaya}")
+            if efko.aktivnost.kommunikacionnaya is not None: parts.append(f"- Коммуникационная: {efko.aktivnost.kommunikacionnaya}")
+        # ЭМПАТИЯ
+        if efko.empaty and any(v is not None for v in [efko.empaty.conscious, efko.empaty.unconscious, efko.empaty.kind_2_rational, efko.empaty.kind_2_emotional]):
+            parts.append("\n**ЭМПАТИЯ:**")
+            if efko.empaty.conscious is not None or efko.empaty.unconscious is not None:
+                parts.append(f"- Сознательная / Бессознательная: {efko.empaty.conscious} / {efko.empaty.unconscious}")
+            if efko.empaty.kind_2_rational is not None or efko.empaty.kind_2_emotional is not None:
+                parts.append(f"- 2 рода (рациональная / эмоциональная): {efko.empaty.kind_2_rational} / {efko.empaty.kind_2_emotional}")
+        # ЭЧВ/ЭЧМ
+        if efko.echv_echm and (efko.echv_echm.echv is not None or efko.echv_echm.echm is not None):
+            parts.append("\n**Глубина ЭЧВ (эмоционально-чувственного восприятия) и ЭЧМ (эмоционально-чувственного моделирования), %:**")
+            if efko.echv_echm.echv is not None: parts.append(f"- ЭЧВ: {efko.echv_echm.echv}")
+            if efko.echv_echm.echm is not None: parts.append(f"- ЭЧМ: {efko.echv_echm.echm}")
+        # Постмодерн
+        if efko.postmodern is not None:
+            parts.append(f"\n**Постмодерн, %**: {efko.postmodern}")
+        # Категориальные блоки
+        if efko.paradigma_k_rabotodatelyu:
+            parts.append(f"\n**Парадигма отношения к работодателю**: {efko.paradigma_k_rabotodatelyu}")
+        if efko.gotovnost_k_komandirovkam:
+            parts.append(f"\n**Готовность к командировкам/переезду**: {efko.gotovnost_k_komandirovkam}")
+        # 15 ЭФКО-тестов (только если нашлись лейблы)
+        from .methods.efko import EFKO_TEST_CATALOG
+        found_tests = []
+        for key, name in EFKO_TEST_CATALOG.items():
+            if getattr(efko, key, None) is not None:
+                found_tests.append(name)
+        if found_tests:
+            parts.append(f"\n**Тесты из системы ЭФКО (по лейблам, без баллов — ждём методичку):** {', '.join(found_tests)}")
+
     if profile.notes:
         parts.append("\n## Заметки парсера\n")
         for n in profile.notes:

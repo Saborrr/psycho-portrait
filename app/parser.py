@@ -450,8 +450,15 @@ def parse_text(full: str, slides_count: int = 0) -> ParsedProfile:
         methods.amthauer = data
         notes.extend(n_notes)
 
+    # === ЭФКО-методики (15 тестов + ЭЧВ/ЭЧМ) ===
+    efko_data, efko_notes = parse_efko(full)
+    if efko_data:
+        methods.efko = efko_data
+        notes.extend(efko_notes)
+
     if not any([methods.cattell_16pf, methods.big_five, methods.mmpi,
-                methods.disc, methods.holland, methods.mbti, methods.amthauer]):
+                methods.disc, methods.holland, methods.mbti, methods.amthauer,
+                methods.efko]):
         notes.append("⚠️ Ни одна методика не распознана. Возможно, в презентации нестандартный формат. Смотри docs/presentation_template.md.")
 
     return ParsedProfile(
@@ -466,3 +473,182 @@ def parse_text(full: str, slides_count: int = 0) -> ParsedProfile:
 def parse_pptx(path: str) -> ParsedProfile:
     full, _slides, n = extract_all_text(path)
     return parse_text(full, slides_count=n)
+
+
+# === ЭФКО-методики (15 тестов + ЭЧВ/ЭЧМ + блоки из реальных pptx) ===
+
+EFKO_TEST_PATTERNS = {
+    "sluzhebnye_otnosheniya_1": [r"Служебные\s+отношения\s*1"],
+    "sluzhebnye_otnosheniya_2": [r"Служебные\s+отношения\s*2"],
+    "logicheskoe_myshlenie":    [r"Логическое\s+мышление"],
+    "leksika":                  [r"^\s*Лексика\s*[\|]?\s*\d"],
+    "zhiznennye_paradigmy":     [r"Жизненные\s+парадигмы"],
+    "vizualnye_obrazy":         [r"Визуальные\s+образы"],
+    "vospriyatie_otnosheniy":   [r"Восприятие\s+отношений"],
+    "obraznoe_myshlenie":       [r"Образное\s+мышление"],
+    "socialnye_otnosheniya_1":  [r"Социальные\s+отношения\s*1"],
+    "sociokulturnyi_vzglyad_1": [r"Социокультурный\s+взгляд\s*1"],
+    "socialnye_orientiry":      [r"Социальные\s+ориентиры"],
+    "sociokulturnyi_vzglyad_2": [r"Социокультурный\s+взгляд\s*2"],
+    "organizaciya_truda":       [r"Организация\s+труда"],
+    "predpochteniya_v_deyatelnosti": [r"Предпочтения\s+в\s+деятельности"],
+    "socialnye_otnosheniya_2":  [r"Социальные\s+отношения\s*2"],
+}
+
+
+def _num_optional(s):
+    """Достать первое число из строки (в т.ч. '7,5' → 7.5). None если пусто/дефис."""
+    s = (s or "").replace(",", ".").strip()
+    if not s or s in ("-", "—", ""):
+        return None
+    m = re.search(r"[-+]?\d+(?:\.\d+)?", s)
+    if not m:
+        return None
+    try:
+        return float(m.group(0))
+    except ValueError:
+        return None
+
+
+def parse_efko(full: str):
+    """Парсер ЭФКО-методик. Возвращает (EFKOSet | None, notes)."""
+    from .methods.efko import (
+        EFKOSet, SluzhebnyeOtnosheniya1, SluzhebnyeOtnosheniya2,
+        LogicheskoeMyshlenie, Leksika, ZhiznennyeParadigmy,
+        VizualnyeObrazy, VospriyatieOtnosheniy, ObraznoeMyshlenie,
+        SocialnyeOtnosheniya1, SocialnyeOtnosheniya2,
+        SociokulturnyiVzglyad1, SociokulturnyiVzglyad2,
+        SocialnyeOrientiry, OrganizaciyaTruda,
+        PredpochteniyaVDeatelnosti, IntellektEfk, Aktivnost, Empaty, EchvEchm,
+    )
+
+    notes = []
+    efko = EFKOSet()
+    lines = full.splitlines()
+
+    # === ИНТЕЛЛЕКТ (Логический, Образный, Лексика) ===
+    intellekt_block = ""
+    for i, line in enumerate(lines):
+        if re.search(r"^\s*ИНТЕЛЛЕКТ\s*[\|]?\s*%?\s*$", line, re.IGNORECASE):
+            intellekt_block = "\n".join(lines[i:min(len(lines), i + 8)])
+            break
+    intellekt = IntellektEfk()
+    if intellekt_block:
+        m = re.search(r"Логическ\w*\s*интеллект\s*[:=—\-]?\s*([0-9.,\-]+)", intellekt_block, re.IGNORECASE)
+        if m: intellekt.logicheskiy = _num_optional(m.group(1))
+        m = re.search(r"Образн\w*\s*интеллект\s*[:=—\-]?\s*([0-9.,\-]+)", intellekt_block, re.IGNORECASE)
+        if m: intellekt.obrazny = _num_optional(m.group(1))
+        m = re.search(r"^\s*Лексика\s*[:=—\-]?\s*([0-9.,\-]+)", intellekt_block, re.IGNORECASE | re.MULTILINE)
+        if m: intellekt.leksika = _num_optional(m.group(1))
+    if any(v is not None for v in [intellekt.logicheskiy, intellekt.obrazny, intellekt.leksika]):
+        efko.intellekt = intellekt
+        notes.append("ЭФКО: распознан блок ИНТЕЛЛЕКТ (Логический, Образный, Лексика).")
+
+    # === АКТИВНОСТЬ (3 шкалы) ===
+    aktivnost_block = ""
+    for i, line in enumerate(lines):
+        if re.search(r"^\s*АКТИВНОСТЬ\s*[\|]?\s*%?\s*$", line, re.IGNORECASE):
+            aktivnost_block = "\n".join(lines[i:min(len(lines), i + 8)])
+            break
+    aktivnost = Aktivnost()
+    if aktivnost_block:
+        m = re.search(r"Физическ\w*\s*[:=—\-]?\s*([0-9.,\-]+)", aktivnost_block, re.IGNORECASE)
+        if m: aktivnost.fizicheskaya = _num_optional(m.group(1))
+        m = re.search(r"Интеллектуальн\w*\s*[:=—\-]?\s*([0-9.,\-]+)", aktivnost_block, re.IGNORECASE)
+        if m: aktivnost.intellektualnaya = _num_optional(m.group(1))
+        m = re.search(r"Коммуникационн\w*\s*[:=—\-]?\s*([0-9.,\-]+)", aktivnost_block, re.IGNORECASE)
+        if m: aktivnost.kommunikacionnaya = _num_optional(m.group(1))
+    if any(v is not None for v in [aktivnost.fizicheskaya, aktivnost.intellektualnaya, aktivnost.kommunikacionnaya]):
+        efko.aktivnost = aktivnost
+        notes.append("ЭФКО: распознан блок АКТИВНОСТЬ (Физическая, Интеллектуальная, Коммуникационная).")
+
+    # === ЭМПАТИЯ (сознательная + бессознательная, 2 рода) ===
+    empaty_block = ""
+    for i, line in enumerate(lines):
+        if re.search(r"^\s*ЭМПАТИЯ", line, re.IGNORECASE):
+            empaty_block = "\n".join(lines[i:min(len(lines), i + 8)])
+            break
+    empaty = Empaty()
+    if empaty_block:
+        # Формат 1: «Сознательная: 55  Бессознательная: 60» (по отдельности)
+        m = re.search(r"(?:Сознательная|Созн\.?)\s*[:=—\-]?\s*([0-9.,\-]+)", empaty_block, re.IGNORECASE)
+        if m: empaty.conscious = _num_optional(m.group(1))
+        m = re.search(r"(?:Бессознательная|Бессозн\.?)\s*[:=—\-]?\s*([0-9.,\-]+)", empaty_block, re.IGNORECASE)
+        if m: empaty.unconscious = _num_optional(m.group(1))
+        # Формат 2: «Созн. 55 | Бессозн. 60» (через |)
+        m = re.search(r"Созн\.\s*([0-9.,]+)\s*[\|]\s*Бессозн\.\s*([0-9.,]+)", empaty_block, re.IGNORECASE)
+        if m and empaty.conscious is None:
+            empaty.conscious = _num_optional(m.group(1))
+            empaty.unconscious = _num_optional(m.group(2))
+        # 2 рода
+        m2 = re.search(r"2\s*рода\s*,?\s*%?\s*[:=—\-]?\s*([0-9.,]+)?\s*[\|]?\s*([0-9.,]+)?", empaty_block, re.IGNORECASE)
+        if m2 and m2.group(1):
+            empaty.kind_2_rational = _num_optional(m2.group(1))
+            empaty.kind_2_emotional = _num_optional(m2.group(2))
+    if any(v is not None for v in [empaty.conscious, empaty.unconscious, empaty.kind_2_rational, empaty.kind_2_emotional]):
+        efko.empaty = empaty
+        notes.append("ЭФКО: распознан блок ЭМПАТИЯ (сознательная + бессознательная, 2 рода).")
+
+    # === ЭЧВ/ЭЧМ (Глубина) ===
+    echv_block = ""
+    for i, line in enumerate(lines):
+        if re.search(r"ГЛУБИНА\s*ЭЧВ", line, re.IGNORECASE) or re.search(r"Глубина\s+ЭЧВ", line, re.IGNORECASE):
+            echv_block = "\n".join(lines[i:min(len(lines), i + 4)])
+            break
+    echv = EchvEchm()
+    if echv_block:
+        m = re.search(r"ЭЧВ\s*[:=—\-]?\s*([0-9.,\-]+)", echv_block, re.IGNORECASE)
+        if m: echv.echv = _num_optional(m.group(1))
+        m = re.search(r"ЭЧМ\s*[:=—\-]?\s*([0-9.,\-]+)", echv_block, re.IGNORECASE)
+        if m: echv.echm = _num_optional(m.group(1))
+    if echv.echv is not None or echv.echm is not None:
+        efko.echv_echm = echv
+        notes.append("ЭФКО: распознан блок Глубина ЭЧВ/ЭЧМ.")
+
+    # === Простые однозначные блоки ===
+    m = re.search(r"Постмодерн\s*,?\s*%?\s*[:=—\-]?\s*([0-9.,\-]+)", full, re.IGNORECASE)
+    if m:
+        efko.postmodern = _num_optional(m.group(1))
+        notes.append("ЭФКО: распознан блок Постмодерн, %.")
+
+    m = re.search(r"ПАРАДИГМА\s+ОТНОШЕНИЯ\s+К\s+РАБОТОДАТЕЛЮ\s*([\w\s\-]{2,80}?)(?=\n|$)", full, re.IGNORECASE | re.MULTILINE)
+    if m:
+        efko.paradigma_k_rabotodatelyu = m.group(1).strip()
+
+    m = re.search(r"Готовность\s+к\s+командировкам[^|\n]*[\|]?\s*([\-\w\s]{1,40})", full, re.IGNORECASE)
+    if m and m.group(1).strip() not in ("", "-", "—"):
+        efko.gotovnost_k_komandirovkam = m.group(1).strip()
+
+    # === 15 ЭФКО-тестов (структура для будущих данных) ===
+    test_labels_map = {
+        "sluzhebnye_otnosheniya_1": (r"Служебные\s+отношения\s*1", SluzhebnyeOtnosheniya1),
+        "sluzhebnye_otnosheniya_2": (r"Служебные\s+отношения\s*2", SluzhebnyeOtnosheniya2),
+        "logicheskoe_myshlenie":    (r"Логическое\s+мышление", LogicheskoeMyshlenie),
+        "leksika":                  (r"^\s*Лексика\s*[\|]?\s*\d", Leksika),
+        "zhiznennye_paradigmy":     (r"Жизненные\s+парадигмы", ZhiznennyeParadigmy),
+        "vizualnye_obrazy":         (r"Визуальные\s+образы", VizualnyeObrazy),
+        "vospriyatie_otnosheniy":   (r"Восприятие\s+отношений", VospriyatieOtnosheniy),
+        "obraznoe_myshlenie":       (r"Образное\s+мышление", ObraznoeMyshlenie),
+        "socialnye_otnosheniya_1":  (r"Социальные\s+отношения\s*1", SocialnyeOtnosheniya1),
+        "sociokulturnyi_vzglyad_1": (r"Социокультурный\s+взгляд\s*1", SociokulturnyiVzglyad1),
+        "socialnye_orientiry":      (r"Социальные\s+ориентиры", SocialnyeOrientiry),
+        "sociokulturnyi_vzglyad_2": (r"Социокультурный\s+взгляд\s*2", SociokulturnyiVzglyad2),
+        "organizaciya_truda":       (r"Организация\s+труда", OrganizaciyaTruda),
+        "predpochteniya_v_deyatelnosti": (r"Предпочтения\s+в\s+деятельности", PredpochteniyaVDeatelnosti),
+        "socialnye_otnosheniya_2":  (r"Социальные\s+отношения\s*2", SocialnyeOtnosheniya2),
+    }
+    for key, (pattern, cls) in test_labels_map.items():
+        if re.search(pattern, full, re.IGNORECASE):
+            setattr(efko, key, cls())
+
+    has_any = any([
+        efko.intellekt, efko.aktivnost, efko.empaty, efko.echv_echm,
+        efko.postmodern is not None,
+        bool(efko.paradigma_k_rabotodatelyu),
+        any(getattr(efko, k, None) is not None for k in EFKO_TEST_PATTERNS),
+    ])
+    if not has_any:
+        return None, []
+    if not notes:
+        notes.append("ЭФКО: найдены лейблы 15 тестов, но без баллов (ждём методичку).")
+    return efko, notes

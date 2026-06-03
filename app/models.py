@@ -123,7 +123,12 @@ class MethodScores(BaseModel):
     holland: Optional[Holland] = None
     mbti: Optional[MBTI] = None
     amthauer: Optional[Amthauer] = None
+    efko: Optional["EFKOSet"] = Field(None, description="Корпоративные методики ГК «ЭФКО» (15 тестов + ЭЧВ/ЭЧМ)")
     extra: dict = Field(default_factory=dict, description="Любые нераспознанные данные")
+
+
+# Чтобы Pydantic мог резолвить EFKOSet в MethodScores
+from .methods.efko import EFKOSet  # noqa: E402
 
 
 class ParsedProfile(BaseModel):
