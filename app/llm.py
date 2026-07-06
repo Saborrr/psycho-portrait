@@ -2,7 +2,8 @@
 LLM-клиент. Совместим с любым OpenAI-compat API.
 
 Провайдеры (все OpenAI-compat, в .env выбирается через LLM_PROVIDER):
-  - glm       — z.ai GLM 5.1 (текущий основной)
+  - mimo      — Xiaomi MiMo V2.5 Pro (Token Plan)
+  - glm       — z.ai GLM 5.1
   - deepseek  — DeepSeek
   - qwen      — Alibaba Qwen через DashScope
   - openai    — ChatGPT / OpenAI
@@ -80,6 +81,17 @@ PROVIDERS: dict[str, ProviderConfig] = {
             "MiniMax M3 через OpenAI-compat эндпоинт. "
             "Мультимодал (vision), 1M контекст, дешёвый. "
             "Для китайских пользователей есть зеркало api.minimaxi.com/v1."
+        ),
+    ),
+    "mimo": ProviderConfig(
+        name="Xiaomi MiMo (Token Plan)",
+        base_url="https://token-plan-sgp.xiaomimimo.com/v1",
+        default_model="mimo-v2.5-pro",
+        notes=(
+            "Xiaomi MiMo V2.5 Pro через Token Plan. "
+            "1M контекст, reasoning, дешёвый. "
+            "Базовый URL зависит от региона: sgp / ams / cn. "
+            "Документация: https://mimo.mi.com/docs/en-US/tokenplan/integration/openclaw"
         ),
     ),
 }

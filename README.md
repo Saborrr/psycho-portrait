@@ -28,7 +28,7 @@ PPTX или PDF с результатами тестов
          ↓
    сравнение с нормой (Z/T-скоры, перцентили, категории)
          ↓
-   LLM (DeepSeek / GLM / Qwen / ChatGPT / Gemini / MiniMax)
+   LLM (MiMo / DeepSeek / GLM / Qwen / ChatGPT / Gemini / MiniMax)
          ↓
   готовая характеристика в Markdown
 ```
@@ -152,8 +152,8 @@ docker run -p 8000:8000 --env-file .env psycho-portrait
 
 ```env
 # ===== LLM =====
-# Провайдер: glm | deepseek | qwen | openai | gemini | minimax | custom
-LLM_PROVIDER=deepseek
+# Провайдер: mimo | glm | deepseek | qwen | openai | gemini | minimax | custom
+LLM_PROVIDER=mimo
 LLM_API_KEY=sk-ваш_ключ_сюда
 
 # Модель (если не указана — берётся дефолт провайдера)
@@ -332,7 +332,9 @@ psycho-portrait/
 - [x] **PDF на вход** (pdfplumber + tesseract OCR) — для бланков с отсканированными результатами ✅ v0.2
 - [x] **История загрузок** (SQLite) — сохранять все профили, дедуп по sha256 ✅ v0.2
 - [x] **Сравнение с нормой** — учёт пола, возраста, проф-группы, Z/T-скоры ✅ v0.3
-- [x] **Реестр LLM-провайдеров** — DeepSeek / GLM / Qwen / ChatGPT / Gemini / MiniMax ✅ v0.3
+- [x] **Реестр LLM-провайдеров** — MiMo / DeepSeek / GLM / Qwen / ChatGPT / Gemini / MiniMax ✅ v0.3
+- [x] **Excel-экспорт** — генерация отчёта в формате Excel с фото, рекомендациями и форматированием ✅ v0.4
+- [x] **Анализ шаблона** — 15 образцов отчётов ЭФКО проанализированы, стиль и структура документированы ✅ v0.4
 - [ ] **Генератор шаблона PPTX** — сделать готовый бланк, который скачал и заполнил
 - [ ] **Telegram-бот** (через `@my_amster_bot`) — кидаешь файл → получаешь характеристику в чат
 - [ ] **Расширение методик:**
