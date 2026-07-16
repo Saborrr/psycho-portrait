@@ -4,7 +4,7 @@
 ⚠️ Это **внутренние методики** ГК «ЭФКО» — НЕ стандартные психологические тесты.
 Они используются для HR-отбора и развития сотрудников предприятий ЭФКО.
 
-15 тестов в системе тестирования ЭФКО (по состоянию на 2026-06):
+15 тестовых блоков, встречающихся в предоставленных материалах:
   1. Служебные отношения 1
   2. Служебные отношения 2
   3. Логическое мышление
@@ -23,8 +23,10 @@
 
 + блоки ЭЧВ/ЭЧМ (Эмоционально-Чувственное Восприятие / Моделирование).
 
-⚠️ Методичка от ЭФКО пока не получена. Ниже — **каркас** для парсинга и хранения
-данных. Интерпретации добавляются по мере получения методички.
+Пороговые диапазоны и правила интерпретации вынесены в ``app.methodology`` и
+основаны на приложенной лекции «Психологическое тестирование кандидатов»,
+актуализация 30.01.2025. Эти проценты нельзя называть популяционными
+перцентилями или клиническими показателями.
 """
 from __future__ import annotations
 from typing import Optional
@@ -144,7 +146,7 @@ class VospriyatieOtnosheniy(BaseModel):
 
 class EchvEchm(BaseModel):
     """Глубина ЭЧВ (эмоционально-чувственное восприятие) и ЭЧМ (эмоционально-чувственное моделирование).
-    Без детальной методички — хранится как % по двум шкалам."""
+    Хранится как % по двум шкалам; диапазоны берутся из приложенной лекции."""
     echv: Optional[float] = Field(None, description="Глубина ЭЧВ (эмоционально-чувственного восприятия), %")
     echm: Optional[float] = Field(None, description="Глубина ЭЧМ (эмоционально-чувственного моделирования), %")
 
@@ -177,6 +179,64 @@ class IntellektEfk(BaseModel):
     leksika: Optional[float] = Field(None, description="Лексика, %")
 
 
+class ConsciousUnconsciousScore(BaseModel):
+    """Одна шкала с сознательной и бессознательной оценкой, %."""
+    conscious: Optional[float] = None
+    unconscious: Optional[float] = None
+
+
+class EmployerParadigm(BaseModel):
+    """Парадигма отношения к работодателю."""
+    nothing_personal: ConsciousUnconsciousScore = Field(default_factory=ConsciousUnconsciousScore)
+    partnership: ConsciousUnconsciousScore = Field(default_factory=ConsciousUnconsciousScore)
+    solidarity: ConsciousUnconsciousScore = Field(default_factory=ConsciousUnconsciousScore)
+
+
+class LifeGamble(BaseModel):
+    """Азарт к жизни, бессознательная оценка, %."""
+    creative: Optional[float] = Field(None, description="Созидательный азарт")
+    idle: Optional[float] = Field(None, description="Праздный азарт")
+    passivity: Optional[float] = Field(None, description="Пассивность")
+
+
+class HarmonyDecision(BaseModel):
+    """Гармония радости/дискомфорта и решительность, %."""
+    discomfort_harmony: Optional[float] = Field(None, description="Гармония дискомфорта")
+    decisiveness: Optional[float] = Field(None, description="Решительность")
+    joy_harmony: Optional[float] = Field(None, description="Гармония радости")
+    caution: Optional[float] = Field(None, description="Осторожность")
+
+
+class WorkDiscomfort(BaseModel):
+    """Принятие корпоративных норм и служебного дискомфорта, %."""
+    vtr: Optional[float] = None
+    sedo: Optional[float] = None
+    neatness: Optional[float] = None
+    business_trips: Optional[float] = None
+
+
+class AchievementModel(BaseModel):
+    """Отношение к модели достижения успеха, %."""
+    rational_enterprising: Optional[float] = None
+    enabling_entrepreneurs: Optional[float] = None
+    public_dismissal_significance: Optional[float] = None
+
+
+class PersonnelTypes(BaseModel):
+    """Типы персонала по отношению к работе и развитию, %."""
+    worker: Optional[float] = Field(None, description="Труженик")
+    evolutionary_development: Optional[float] = None
+    leadership: Optional[float] = None
+    duelist: Optional[float] = Field(None, description="Поединщик")
+
+
+class SafetyAttitude(BaseModel):
+    """Модели отношения к правилам безопасности, %."""
+    reckless_hero: Optional[float] = None
+    passive_executor: Optional[float] = None
+    protector: Optional[float] = None
+
+
 # === Сводный блок ЭФКО-методик (всё вместе) ===
 
 class EFKOSet(BaseModel):
@@ -205,7 +265,15 @@ class EFKOSet(BaseModel):
     echv_echm: Optional[EchvEchm] = Field(None, description="Глубина ЭЧВ и ЭЧМ")
     # Прочие блоки из реальных pptx
     postmodern: Optional[float] = Field(None, description="Постмодерн, %")
-    paradigma_k_rabotodatelyu: Optional[str] = Field(None, description="Парадигма отношения к работодателю (категория)")
+    employer_paradigm: Optional[EmployerParadigm] = None
+    life_gamble: Optional[LifeGamble] = None
+    harmony_decision: Optional[HarmonyDecision] = None
+    work_discomfort: Optional[WorkDiscomfort] = None
+    achievement_model: Optional[AchievementModel] = None
+    personnel_types: Optional[PersonnelTypes] = None
+    safety_attitude: Optional[SafetyAttitude] = None
+    # Оставлено для обратной совместимости со старыми JSON.
+    paradigma_k_rabotodatelyu: Optional[str] = Field(None, description="Устаревшее текстовое поле")
     gotovnost_k_komandirovkam: Optional[str] = Field(None, description="Готовность к командировкам/переезду")
     # Свободные поля (для новых блоков, которые не распознались)
     extra: dict = Field(default_factory=dict)

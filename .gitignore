@@ -23,6 +23,11 @@ build/
 
 # Logs
 *.log
+data/
+tmp/
+*.db
+*.db-wal
+*.db-shm
 
 # Uploads (для дева)
 uploads/

@@ -1,184 +1,158 @@
-// Psycho Portrait — frontend
 (function () {
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  }
   const $ = (id) => document.getElementById(id);
   const dropzone = $("dropzone");
   const fileInput = $("file-input");
-  const browseBtn = $("browse-btn");
-  const clearBtn = $("clear-btn");
-  const fileName = $("file-name");
-  const dzFile = $("dz-file");
-  const dzContent = dropzone.querySelector(".dz-content");
+  const fileList = $("file-list");
+  const apiKey = $("api-key");
+  const consent = $("consent");
   const generateBtn = $("generate-btn");
-  const briefMode = $("brief-mode");
+  const excelBtn = $("excel-btn");
+  const clearBtn = $("clear-btn");
   const statusCard = $("status-card");
   const statusLog = $("status-log");
   const resultCard = $("result-card");
   const resultMd = $("result-md");
-  const copyBtn = $("copy-btn");
-  const downloadBtn = $("download-btn");
-  const downloadPdfBtn = $("download-pdf-btn");
-  const debugCard = $("debug-card");
-  const debugProfile = $("debug-profile");
-
-  let currentFile = null;
+  let files = [];
   let lastResult = null;
 
-  // === Drag & drop ===
-  ["dragenter", "dragover"].forEach((ev) => {
-    dropzone.addEventListener(ev, (e) => {
-      e.preventDefault();
-      dropzone.classList.add("dragover");
-    });
+  apiKey.value = sessionStorage.getItem("psychoPortraitApiKey") || "";
+  apiKey.addEventListener("input", () => {
+    sessionStorage.setItem("psychoPortraitApiKey", apiKey.value);
+    refreshButtons();
   });
-  ["dragleave", "drop"].forEach((ev) => {
-    dropzone.addEventListener(ev, (e) => {
-      e.preventDefault();
-      dropzone.classList.remove("dragover");
-    });
-  });
-  dropzone.addEventListener("drop", (e) => {
-    const files = e.dataTransfer.files;
-    if (files.length) setFile(files[0]);
-  });
-  dropzone.addEventListener("click", (e) => {
-    if (e.target.closest("button") || e.target.closest(".dz-file")) return;
-    fileInput.click();
-  });
-  browseBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    fileInput.click();
-  });
-  fileInput.addEventListener("change", (e) => {
-    if (e.target.files.length) setFile(e.target.files[0]);
-  });
-  clearBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    setFile(null);
-  });
+  consent.addEventListener("change", refreshButtons);
 
-  function setFile(file) {
-    currentFile = file;
-    if (file) {
-      fileName.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} КБ)`;
-      dzContent.classList.add("hidden");
-      dzFile.classList.remove("hidden");
-      generateBtn.disabled = false;
-    } else {
-      fileInput.value = "";
-      dzContent.classList.remove("hidden");
-      dzFile.classList.add("hidden");
-      generateBtn.disabled = true;
-    }
+  ["dragenter", "dragover"].forEach((name) => dropzone.addEventListener(name, (event) => {
+    event.preventDefault(); dropzone.classList.add("dragover");
+  }));
+  ["dragleave", "drop"].forEach((name) => dropzone.addEventListener(name, (event) => {
+    event.preventDefault(); dropzone.classList.remove("dragover");
+  }));
+  dropzone.addEventListener("drop", (event) => addFiles(event.dataTransfer.files));
+  dropzone.addEventListener("click", (event) => {
+    if (!event.target.closest("button")) fileInput.click();
+  });
+  dropzone.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") fileInput.click();
+  });
+  $("browse-btn").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => addFiles(fileInput.files));
+  clearBtn.addEventListener("click", () => { files = []; fileInput.value = ""; renderFiles(); });
+
+  function addFiles(next) {
+    const accepted = Array.from(next).filter((file) => /\.(pptx|pdf)$/i.test(file.name));
+    const existing = new Set(files.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+    accepted.forEach((file) => {
+      const key = `${file.name}:${file.size}:${file.lastModified}`;
+      if (!existing.has(key)) { files.push(file); existing.add(key); }
+    });
+    renderFiles();
   }
 
-  // === Status log ===
-  function log(msg, kind = "info") {
+  function renderFiles() {
+    fileList.innerHTML = "";
+    files.forEach((file, index) => {
+      const li = document.createElement("li");
+      li.textContent = `${index + 1}. ${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} МБ`;
+      fileList.appendChild(li);
+    });
+    fileList.classList.toggle("hidden", files.length === 0);
+    refreshButtons();
+  }
+
+  function refreshButtons() {
+    const ready = consent.checked && (apiKey.value.trim().length > 0 || location.hostname === "127.0.0.1" || location.hostname === "localhost");
+    clearBtn.disabled = files.length === 0;
+    generateBtn.disabled = !(ready && files.length === 1);
+    excelBtn.disabled = !(ready && files.length > 0);
+  }
+
+  function headers() {
+    const value = apiKey.value.trim();
+    return value ? { "X-API-Key": value } : {};
+  }
+
+  function log(message, kind = "info") {
     const line = document.createElement("div");
     line.className = `log-line ${kind}`;
-    const ts = new Date().toLocaleTimeString();
-    line.textContent = `[${ts}] ${msg}`;
+    line.textContent = message;
     statusLog.appendChild(line);
-    statusLog.scrollTop = statusLog.scrollHeight;
   }
 
-  // === Generate ===
+  async function errorMessage(response) {
+    try {
+      const body = await response.json();
+      if (typeof body.detail === "string") return body.detail;
+      if (body.detail && body.detail.message) return body.detail.message;
+      return body.error || `Ошибка ${response.status}`;
+    } catch (_) { return `Ошибка ${response.status}`; }
+  }
+
   generateBtn.addEventListener("click", async () => {
-    if (!currentFile) return;
     statusCard.classList.remove("hidden");
     resultCard.classList.add("hidden");
-    debugCard.classList.add("hidden");
     statusLog.innerHTML = "";
-    generateBtn.disabled = true;
-    generateBtn.textContent = "Генерирую…";
-
-    log(`📄 Файл: ${currentFile.name} (${(currentFile.size / 1024).toFixed(1)} КБ)`);
-    log("🔍 Парсим PPTX…", "info");
-
-    const fd = new FormData();
-    fd.append("file", currentFile);
-    fd.append("style", briefMode.checked ? "brief" : "default");
-
+    log("Извлекаю показатели и проверяю достоверность...");
+    setBusy(true);
+    const form = new FormData();
+    form.append("file", files[0]);
     try {
-      const t0 = Date.now();
-      const resp = await fetch("/api/generate", { method: "POST", body: fd });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        let errJson;
-        try { errJson = JSON.parse(errText); } catch { errJson = { error: errText }; }
-        log(`❌ Ошибка ${resp.status}: ${errJson.error || resp.statusText}`, "err");
-        if (errJson.details) {
-          errJson.details.forEach((d) => log(`  • ${d}`, "warn"));
-        }
-        if (errJson.raw_text_preview) {
-          log("📄 Превью текста из PPTX (первые 2кб):", "info");
-          log(errJson.raw_text_preview, "info");
-        }
-        return;
-      }
-
-      const data = await resp.json();
-      const dt = ((Date.now() - t0) / 1000).toFixed(1);
-      log(`✅ Готово за ${dt}с`, "ok");
-      log(`🤖 Модель: ${data.model}`, "info");
-      if (data.profile?.notes?.length) {
-        data.profile.notes.forEach((n) => log(`  • ${n}`, "warn"));
-      }
-
+      const response = await fetch("/api/generate", { method: "POST", headers: headers(), body: form });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      const data = await response.json();
       lastResult = data;
       resultMd.textContent = data.characteristics_markdown;
       resultCard.classList.remove("hidden");
-      debugProfile.textContent = JSON.stringify(data.profile, null, 2);
-      debugCard.classList.remove("hidden");
-    } catch (e) {
-      log(`❌ Сетевая ошибка: ${e.message}`, "err");
-    } finally {
-      generateBtn.disabled = false;
-      generateBtn.textContent = "Сгенерировать характеристику";
-    }
+      log(`Готово. Модель: ${data.model}`, "ok");
+      (data.report?.quality_warnings || []).forEach((item) => log(item, "warn"));
+    } catch (error) { log(error.message, "err"); }
+    finally { setBusy(false); }
   });
 
-  // === Actions ===
-  copyBtn.addEventListener("click", async () => {
-    if (!lastResult) return;
+  excelBtn.addEventListener("click", async () => {
+    statusCard.classList.remove("hidden");
+    resultCard.classList.add("hidden");
+    statusLog.innerHTML = "";
+    log(`Формирую ${files.length} характеристик и книгу Excel...`);
+    setBusy(true);
+    const form = new FormData();
+    files.forEach((file) => form.append("files", file));
     try {
-      await navigator.clipboard.writeText(lastResult.characteristics_markdown);
-      copyBtn.textContent = "✅ Скопировано!";
-      setTimeout(() => (copyBtn.textContent = "📋 Скопировать"), 1500);
-    } catch (e) {
-      alert("Не удалось скопировать: " + e.message);
-    }
+      const response = await fetch("/api/batch/generate-xlsx", { method: "POST", headers: headers(), body: form });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      const blob = await response.blob();
+      downloadBlob(blob, "psychological_characteristics.xlsx");
+      log("Excel сформирован и скачан", "ok");
+    } catch (error) { log(error.message, "err"); }
+    finally { setBusy(false); }
   });
 
-  downloadBtn.addEventListener("click", () => {
-    if (!lastResult) return;
-    const md = lastResult.characteristics_markdown;
-    const fname = (lastResult.profile?.employee?.full_name || "characteristic").replace(/\s+/g, "_") + ".md";
-    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+  function setBusy(busy) {
+    generateBtn.textContent = busy ? "Обработка..." : "Характеристика одного";
+    excelBtn.textContent = busy ? "Обработка..." : "Сформировать Excel";
+    generateBtn.disabled = busy;
+    excelBtn.disabled = busy;
+    clearBtn.disabled = busy;
+    if (!busy) refreshButtons();
+  }
+
+  function downloadBlob(blob, name) {
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fname;
-    a.click();
-    URL.revokeObjectURL(url);
-  });
+    const anchor = document.createElement("a");
+    anchor.href = url; anchor.download = name; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
-  // PDF — простой, через window.print(); для продвинутого — будем делать через бэкенд
-  downloadPdfBtn.addEventListener("click", () => {
-    if (!lastResult) return;
-    const md = lastResult.characteristics_markdown;
-    // Простая конвертация markdown → HTML → печать в PDF
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Характеристика</title>
-      <style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;line-height:1.7;color:#222}
-      h1,h2,h3{margin-top:1.5rem}h1{border-bottom:2px solid #444;padding-bottom:.3rem}
-      h2{color:#333;border-bottom:1px solid #ccc;padding-bottom:.2rem}
-      table{border-collapse:collapse;margin:1rem 0}td,th{border:1px solid #999;padding:.4rem .7rem}
-      </style></head><body><pre style="white-space:pre-wrap;font-family:inherit">${md.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]))}</pre>
-      <script>window.onload=()=>setTimeout(()=>window.print(),300);<\/script>
-      </body></html>`;
-    const w = window.open("", "_blank");
-    if (!w) { alert("Разреши всплывающие окна для PDF"); return; }
-    w.document.write(html);
-    w.document.close();
+  $("copy-btn").addEventListener("click", async () => {
+    if (lastResult) await navigator.clipboard.writeText(lastResult.characteristics_markdown);
   });
+  $("download-btn").addEventListener("click", () => {
+    if (!lastResult) return;
+    const blob = new Blob([lastResult.characteristics_markdown], { type: "text/markdown;charset=utf-8" });
+    downloadBlob(blob, "psychological_characteristic.md");
+  });
+  renderFiles();
 })();

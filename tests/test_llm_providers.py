@@ -14,7 +14,7 @@ from app.llm import (  # noqa: E402
 
 
 def test_all_providers_registered():
-    expected = {"glm", "deepseek", "qwen", "openai", "gemini", "minimax"}
+    expected = {"glm", "deepseek", "qwen", "openai", "gemini", "minimax", "mimo"}
     actual = set(PROVIDERS.keys())
     assert expected == actual, f"Провайдеры: ожидаем {expected}, есть {actual}"
     print(f"✅ PROVIDERS содержит: {sorted(PROVIDERS.keys())}")
@@ -86,6 +86,19 @@ def test_unknown_provider_raises():
         print(f"✅ Неизвестный провайдер → RuntimeError: {e}")
     else:
         raise AssertionError("Должен был выкинуть RuntimeError")
+
+
+def test_client_creation_is_compatible_with_pinned_httpx(monkeypatch):
+    import asyncio
+    from app.llm import get_client
+    monkeypatch.setenv("LLM_PROVIDER", "qwen")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_TRUST_ENV", "false")
+    reset_client()
+    client = get_client()
+    assert client is not None
+    asyncio.run(client.close())
+    reset_client()
 
 
 def main():
