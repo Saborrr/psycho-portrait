@@ -1,71 +1,83 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Psycho Portrait — генератор психологических характеристик</title>
-<link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#176b5b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="icon" href="/static/icons/icon-192.png" type="image/png">
+  <title>Psycho Portrait</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="container">
   <header>
-    <h1>🧠 Psycho Portrait</h1>
-    <p class="tagline">Загрузи PPTX с результатами тестов → получи психологическую характеристику</p>
+    <p class="eyebrow">Локальный рабочий инструмент</p>
+    <h1>Psycho Portrait</h1>
+    <p class="tagline">PPTX или PDF с результатами тестирования в проверяемую характеристику и Excel</p>
   </header>
 
   <main>
+    <section class="card access">
+      <div>
+        <h2>Доступ</h2>
+        <p class="hint">Ключ хранится только в текущей вкладке браузера.</p>
+      </div>
+      <label class="field">API-ключ
+        <input type="password" id="api-key" autocomplete="off" placeholder="X-API-Key">
+      </label>
+    </section>
+
+    <section class="card privacy">
+      <h2>Перед загрузкой</h2>
+      <p>Файлы содержат персональные данные и результаты психологического тестирования. Убедитесь, что у вас есть законное основание и согласие на обработку. Для генерации во внешнюю LLM передаются только обезличенные показатели и должность, без ФИО, имени файла, адреса, семейного положения и истории работы.</p>
+      <label class="checkbox consent">
+        <input type="checkbox" id="consent">
+        <span>Подтверждаю полномочия на обработку и ознакомление с ограничениями</span>
+      </label>
+    </section>
+
     <section class="card upload">
-      <h2>1. Загрузи презентацию</h2>
-      <div id="dropzone" class="dropzone">
-        <input type="file" id="file-input" accept=".pptx" hidden>
+      <h2>1. Выберите документы</h2>
+      <div id="dropzone" class="dropzone" tabindex="0">
+        <input type="file" id="file-input" accept=".pptx,.pdf" multiple hidden>
         <div class="dz-content">
-          <div class="dz-icon">📄</div>
-          <p><strong>Перетащи .pptx сюда</strong></p>
-          <p>или <button type="button" id="browse-btn" class="link-btn">выбери файл</button></p>
-          <p class="hint">Макс. 25 МБ · 16PF · Big Five · MMPI · DISC · HOLLAND · MBTI · Амтхауэр</p>
-        </div>
-        <div class="dz-file hidden" id="dz-file">
-          <span id="file-name">—</span>
-          <button type="button" id="clear-btn" class="link-btn">×</button>
+          <div class="dz-icon">⇧</div>
+          <p><strong>Перетащите PPTX или PDF</strong></p>
+          <p>или <button type="button" id="browse-btn" class="link-btn">выберите файлы</button></p>
+          <p class="hint">До 25 МБ на файл. Для Excel можно выбрать несколько сотрудников.</p>
         </div>
       </div>
-
+      <ul id="file-list" class="file-list hidden"></ul>
       <div class="controls">
-        <label class="checkbox">
-          <input type="checkbox" id="brief-mode">
-          <span>Краткий режим (~800 слов)</span>
-        </label>
-        <button id="generate-btn" disabled class="primary">Сгенерировать характеристику</button>
+        <button id="clear-btn" class="secondary" disabled>Очистить</button>
+        <button id="generate-btn" class="secondary" disabled>Характеристика одного</button>
+        <button id="excel-btn" class="primary" disabled>Сформировать Excel</button>
       </div>
     </section>
 
-    <section class="card status hidden" id="status-card">
-      <h2>2. Процесс</h2>
+    <section class="card status hidden" id="status-card" aria-live="polite">
+      <h2>2. Обработка</h2>
       <div id="status-log"></div>
     </section>
 
     <section class="card result hidden" id="result-card">
-      <h2>3. Результат</h2>
-      <div class="result-actions">
-        <button id="copy-btn" class="link-btn">📋 Скопировать</button>
-        <button id="download-btn" class="link-btn">💾 Скачать .md</button>
-        <button id="download-pdf-btn" class="link-btn">📄 Скачать .pdf</button>
+      <div class="result-head">
+        <h2>3. Черновик характеристики</h2>
+        <div class="result-actions">
+          <button id="copy-btn" class="secondary">Скопировать</button>
+          <button id="download-btn" class="secondary">Скачать .md</button>
+        </div>
       </div>
       <pre id="result-md" class="result-md"></pre>
-    </section>
-
-    <section class="card debug hidden" id="debug-card">
-      <h3>📊 Распознанные данные</h3>
-      <pre id="debug-profile" class="result-md"></pre>
     </section>
   </main>
 
   <footer>
-    <p><small>⚠️ Это инструмент-ассистент, не замена психологу. Финальное заключение — за специалистом.</small></p>
-    <p><small>MIT · <a href="https://github.com/Saborrr/psycho-portrait" target="_blank">GitHub</a></small></p>
+    <p>Инструмент формирует рабочую гипотезу. Итог проверяет квалифицированный психолог; отчет нельзя использовать как единственное основание кадрового решения.</p>
   </footer>
 </div>
-
 <script src="/static/app.js"></script>
 </body>
 </html>

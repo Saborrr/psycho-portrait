@@ -1,0 +1,13 @@
+.git
+.env
+.venv
+__pycache__
+.pytest_cache
+tests
+tmp
+data
+*.db
+*.xlsx
+*.pptx
+*.pdf
+!samples/*.pptx

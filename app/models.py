@@ -138,3 +138,15 @@ class ParsedProfile(BaseModel):
     raw_text: str = Field("", description="Весь текст презентации (для LLM-контекста)")
     slides_count: int = 0
     notes: list[str] = Field(default_factory=list, description="Заметки парсера (что не распозналось)")
+    source_filename: Optional[str] = None
+    methodology_version: str = "efko-lecture-2025.01"
+
+
+class PsychologicalReport(BaseModel):
+    """Строго структурированный результат для UI, хранения и Excel-экспорта."""
+    emotional_motivation: str = Field(..., description="Эмоциональная природа мотивации")
+    management_style: str = Field(..., description="Стиль управления")
+    communication_style: str = Field(..., description="Стиль коммуникации")
+    risk_factors: str = Field(..., description="Факторы риска")
+    recommendations: list[str] = Field(..., min_length=10)
+    quality_warnings: list[str] = Field(default_factory=list)

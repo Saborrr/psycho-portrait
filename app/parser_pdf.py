@@ -15,11 +15,9 @@
 Шаблоны бланков см. в docs/presentation_template.md.
 """
 from __future__ import annotations
-import io
 import logging
+import os
 import re
-from typing import Optional
-
 import pdfplumber
 
 from .models import ParsedProfile
@@ -115,6 +113,9 @@ def parse_pdf(pdf_path: str) -> ParsedProfile:
     """
     # Шаг 1: текстовый слой
     full, n = _extract_text_layer(pdf_path)
+    max_pages = max(1, int(os.getenv("MAX_SLIDES", "50")))
+    if n > max_pages:
+        raise ValueError(f"PDF содержит больше {max_pages} страниц")
     avg_chars = len(full) / max(n, 1)
     log.info("PDF: %d страниц, %d символов (%.0f на стр.)", n, len(full), avg_chars)
 

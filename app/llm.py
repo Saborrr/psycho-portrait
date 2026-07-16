@@ -20,6 +20,7 @@ LLM-клиент. Совместим с любым OpenAI-compat API.
 from __future__ import annotations
 import os
 from dataclasses import dataclass, field
+import httpx
 from openai import AsyncOpenAI
 
 
@@ -120,7 +121,7 @@ _active_config: ProviderConfig | None = None
 def _resolve_config() -> ProviderConfig:
     """Определить активного провайдера по env."""
     global _active_config
-    provider_id = os.getenv("LLM_PROVIDER", "glm").lower()
+    provider_id = os.getenv("LLM_PROVIDER", "qwen").lower()
     if provider_id == "custom":
         # Свой base_url / model / api_key
         base_url = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
@@ -149,7 +150,15 @@ def get_client() -> AsyncOpenAI:
             )
         # base_url можно переопределить через env (для custom-эндпоинтов)
         base_url = os.getenv("LLM_BASE_URL", cfg.base_url)
-        _client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+        timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
+        trust_env = os.getenv("LLM_TRUST_ENV", "false").lower() in {"1", "true", "yes", "on"}
+        _client = AsyncOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            timeout=timeout,
+            max_retries=max(0, int(os.getenv("LLM_MAX_RETRIES", "2"))),
+            http_client=httpx.AsyncClient(timeout=timeout, trust_env=trust_env),
+        )
     return _client
 
 
@@ -161,7 +170,7 @@ def get_model() -> str:
 
 def get_active_provider() -> str:
     """ID текущего провайдера (для логов/UI)."""
-    return os.getenv("LLM_PROVIDER", "glm").lower()
+    return os.getenv("LLM_PROVIDER", "qwen").lower()
 
 
 def get_temperature() -> float:
@@ -172,7 +181,7 @@ def get_temperature() -> float:
 
 
 async def chat(messages: list[dict], *, temperature: float | None = None, max_tokens: int = 2500) -> str:
-    """Синхронный вызов LLM, возвращает текст ответа."""
+    """Асинхронный вызов LLM, возвращает текст ответа."""
     client = get_client()
     response = await client.chat.completions.create(
         model=get_model(),

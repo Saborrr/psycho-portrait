@@ -10,10 +10,10 @@
 Шаблоны презентации см. в docs/presentation_template.md.
 """
 from __future__ import annotations
+import os
 import re
 from typing import Optional
 from pptx import Presentation
-from pptx.util import Emu
 
 from .models import (
     EmployeeInfo, MethodScores, ParsedProfile,
@@ -37,8 +37,8 @@ def _shape_text(shape) -> str:
     parts = []
     if shape.has_text_frame:
         for para in shape.text_frame.paragraphs:
-            for run in para.runs:
-                parts.append(run.text)
+            # Runs являются фрагментами форматирования одного абзаца.
+            parts.append("".join(run.text for run in para.runs) or para.text)
     if shape.has_table:
         for row in shape.table.rows:
             for cell in row.cells:
@@ -46,9 +46,32 @@ def _shape_text(shape) -> str:
     return "\n".join(p for p in parts if p)
 
 
+def _chart_text(shape) -> str:
+    """Аудируемое текстовое представление встроенной диаграммы."""
+    if not getattr(shape, "has_chart", False):
+        return ""
+    try:
+        categories = [str(c.label).strip() for c in shape.chart.plots[0].categories]
+        lines = ["ДИАГРАММА: " + " | ".join(categories)]
+        for series in shape.chart.series:
+            values = []
+            for value in series.values:
+                number = float(value)
+                if 0 <= number <= 1:
+                    number *= 100
+                values.append(f"{number:g}")
+            lines.append(f"{str(series.name or 'значения').strip()}: " + " | ".join(values))
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def extract_all_text(path: str) -> tuple[str, list[str], int]:
     """Возвращает (объединённый_текст, текст_по_слайдам, количество_слайдов)."""
     prs = Presentation(path)
+    max_slides = max(1, int(os.getenv("MAX_SLIDES", "50")))
+    if len(prs.slides) > max_slides:
+        raise ValueError(f"PPTX содержит больше {max_slides} слайдов")
     slides_text = []
     for slide in prs.slides:
         chunks = []
@@ -56,6 +79,9 @@ def extract_all_text(path: str) -> tuple[str, list[str], int]:
             t = _shape_text(shape)
             if t.strip():
                 chunks.append(t.strip())
+            chart = _chart_text(shape)
+            if chart:
+                chunks.append(chart)
         slides_text.append("\n".join(chunks))
     full = "\n\n--- SLIDE BREAK ---\n\n".join(slides_text)
     return full, slides_text, len(prs.slides)
@@ -106,6 +132,7 @@ METHOD_HINTS = {
     ],
     "mmpi": [
         r"\bMMPI\b", r"\bСМИЛ\b", r"Миннесотский", r"Миннесо?т",
+        r"ПСИ\s*ХАРАКТЕРИСТИКА",
     ],
     "disc": [
         r"\bDISC\b", r"Диск[\- ]тест", r"Дисковая",
@@ -131,9 +158,10 @@ def detect_method_blocks(text: str) -> dict[str, str]:
         for method, patterns in METHOD_HINTS.items():
             for pat in patterns:
                 if re.search(pat, line, re.IGNORECASE):
-                    # Берём ±15 строк контекста
+                    # Длинные таблицы СМИЛ занимают более 30 строк после
+                    # преобразования ячеек в текст.
                     start = max(0, i - 1)
-                    end = min(len(lines), i + 16)
+                    end = min(len(lines), i + 45)
                     blocks[method] += "\n" + "\n".join(lines[start:end])
                     break
     return blocks
@@ -470,9 +498,11 @@ def parse_text(full: str, slides_count: int = 0) -> ParsedProfile:
     )
 
 
-def parse_pptx(path: str) -> ParsedProfile:
+def parse_pptx(path: str, source_filename: str | None = None) -> ParsedProfile:
     full, _slides, n = extract_all_text(path)
-    return parse_text(full, slides_count=n)
+    profile = parse_text(full, slides_count=n)
+    from .pptx_structured import enrich_profile_from_pptx
+    return enrich_profile_from_pptx(path, profile, source_filename=source_filename)
 
 
 # === ЭФКО-методики (15 тестов + ЭЧВ/ЭЧМ + блоки из реальных pptx) ===
@@ -611,13 +641,8 @@ def parse_efko(full: str):
         efko.postmodern = _num_optional(m.group(1))
         notes.append("ЭФКО: распознан блок Постмодерн, %.")
 
-    m = re.search(r"ПАРАДИГМА\s+ОТНОШЕНИЯ\s+К\s+РАБОТОДАТЕЛЮ\s*([\w\s\-]{2,80}?)(?=\n|$)", full, re.IGNORECASE | re.MULTILINE)
-    if m:
-        efko.paradigma_k_rabotodatelyu = m.group(1).strip()
-
-    m = re.search(r"Готовность\s+к\s+командировкам[^|\n]*[\|]?\s*([\-\w\s]{1,40})", full, re.IGNORECASE)
-    if m and m.group(1).strip() not in ("", "-", "—"):
-        efko.gotovnost_k_komandirovkam = m.group(1).strip()
+    # Эти поля извлекаются структурным PPTX-парсером. Свободные regex давали
+    # ложные захваты соседних заголовков и таблиц.
 
     # === 15 ЭФКО-тестов (структура для будущих данных) ===
     test_labels_map = {
@@ -644,7 +669,10 @@ def parse_efko(full: str):
     has_any = any([
         efko.intellekt, efko.aktivnost, efko.empaty, efko.echv_echm,
         efko.postmodern is not None,
-        bool(efko.paradigma_k_rabotodatelyu),
+        bool(efko.paradigma_k_rabotodatelyu), bool(efko.employer_paradigm),
+        bool(efko.life_gamble), bool(efko.harmony_decision),
+        bool(efko.work_discomfort), bool(efko.achievement_model),
+        bool(efko.personnel_types), bool(efko.safety_attitude),
         any(getattr(efko, k, None) is not None for k in EFKO_TEST_PATTERNS),
     ])
     if not has_any:
